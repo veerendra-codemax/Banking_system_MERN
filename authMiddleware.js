@@ -1,0 +1,46 @@
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+
+export const protect = async (req, res, next) => {
+  let token;
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ message: "Not authorized, no token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({ message: "Not authorized, user not found" });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ message: "Account is deactivated. Contact support." });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Not authorized, invalid or expired token" });
+  }
+};
+
+export const requireVerified = (req, res, next) => {
+  if (!req.user.isVerified) {
+    return res.status(403).json({ message: "Please verify your email before continuing" });
+  }
+  next();
+};
+
+export const admin = (req, res, next) => {
+  if (req.user && req.user.role === "admin") {
+    return next();
+  }
+  return res.status(403).json({ message: "Admin access required" });
+};
